@@ -130,6 +130,9 @@ alpha = 0.5
 gamma = 1.0
 last_action = 0
 reward = 0
+agent = False
+scale = 2
+punished = False
 
 # Need global Q table that persists across runs, state maps to two actions (jump or wait)
 Q = defaultdict(lambda: np.zeros(2))
@@ -172,7 +175,7 @@ pygame.time.set_timer(SCOREEVENT,100)
 
 # AGENTEVENT- Query agent for action
 AGENTEVENT = pygame.USEREVENT + 3
-pygame.time.set_timer(AGENTEVENT,120)
+#pygame.time.set_timer(AGENTEVENT,120)
 
 while True:
     
@@ -185,6 +188,9 @@ while True:
                 bird_movement = 0
                 bird_movement -= 12
                 flap_sound.play()
+                last_action = 1
+                pygame.time.set_timer(AGENTEVENT,0)
+                agent = False
                 
             if event.key == pygame.K_SPACE and game_active == False:
                 game_active = True
@@ -192,6 +198,15 @@ while True:
                 bird_rect.center = (100,512)
                 bird_movement = 0
                 score = 0
+                punished = False
+            
+            if event.key == pygame.K_TAB and agent == True:
+                pygame.time.set_timer(AGENTEVENT,0)
+                agent = False
+            
+            if event.key == pygame.K_TAB and agent == False:
+                pygame.time.set_timer(AGENTEVENT,120)
+                agent = True
 
         if event.type == SPAWNPIPE:
             pipe_list.extend(create_pipe())
@@ -212,7 +227,7 @@ while True:
                 pipe_distance = pipe_list[0].centerx - bird_rect.centerx
                 height_diff = pipe_list[0].top - bird_rect.centery
 
-            state = (height_diff//10, bird_movement, pipe_distance//10)
+            state = (height_diff//scale, bird_movement, pipe_distance//scale)
             # Prepare state tuple from heght relative to next pipe, vertical velocity, 
             #   and x distance to next pipe. To limit state space growth, 
             #   the distances are broken up into 10 pixel increments
@@ -232,6 +247,7 @@ while True:
             bird_movement = 0
             score = 0
             last_action = 0
+            punished = False
             
     # State should be unchanged, but confirm in case weird edge case
     pipe_distance = 700
@@ -240,7 +256,7 @@ while True:
         pipe_distance = pipe_list[0].centerx - bird_rect.centerx
         height_diff = pipe_list[0].top - bird_rect.centery
 
-    state = (height_diff//10, bird_movement, pipe_distance//10)
+    state = (height_diff//scale, bird_movement, pipe_distance//scale)
     screen.blit(bg_surface,(0,0))
 
     # This is where things actually happen in the game, bird moves up/down,
@@ -258,33 +274,47 @@ while True:
         draw_pipes(pipe_list)
         
         # Score
-        pipe_score_check()
+        # If we get a score increase, want the immediate reward to reflect that
+        reward = pipe_score_check()
         score_display('main_game')
-        reward = 0
+        next_state = (height_diff//scale, bird_movement, pipe_distance//scale)
+
+        # Update Q table
+        prev_Q = Q[state][last_action]
+        Q[state][last_action] =  prev_Q + alpha*(reward + gamma*np.max(Q[next_state])- prev_Q)
+
+
     # Game has ended, we died, punish agent
-    else:
+    if not game_active:
         screen.blit(game_over_surface,game_over_rect)
         high_score = update_score(score,high_score)
         score_display('game_over')
         reward = -1
+        if not punished:
+            punished = True
     
-    # Check new state context
-    if (pipe_list):
-        pipe_distance = pipe_list[0].centerx - bird_rect.centerx
-        height_diff = pipe_list[0].top - bird_rect.centery
+            # Check new state context
+            if (pipe_list):
+                pipe_distance = pipe_list[0].centerx - bird_rect.centerx
+                height_diff = pipe_list[0].top - bird_rect.centery
 
-    next_state = (height_diff//10, bird_movement, pipe_distance//10)
+            next_state = (height_diff//scale, bird_movement, pipe_distance//scale)
 
-    # Update Q table
-    prev_Q = Q[state][last_action]
-    Q[state][last_action] =  prev_Q + alpha*(reward + gamma*np.max(Q[next_state])- prev_Q)
+             # Update Q table
+            prev_Q = Q[state][last_action]
+            Q[state][last_action] =  prev_Q + alpha*(reward + gamma*np.max(Q[next_state])- prev_Q)
 
+    # Do nothing by default
+    last_action = 0
 
     # Floor
     floor_x_pos -= 1
     draw_floor()
     if floor_x_pos <= -576:
         floor_x_pos = 0
+    
+    #print("height diff: " + str(height_diff))
+    #print("pipe_distance: " + str(pipe_distance))
     
 
     pygame.display.update()
