@@ -1,6 +1,13 @@
 import pygame, sys, random 
 from collections import defaultdict
 import numpy as np
+import tensorflow as tf
+import cv2
+import numpy as np
+from collections import deque
+from model_dqn import DQN
+import torch
+
 
 def draw_floor():
     screen.blit(floor_surface,(floor_x_pos,900))
@@ -108,6 +115,15 @@ def agent_action(state,epsilon):
     else:
         action = random.choice(range(2))
     return action
+
+def preprocess_game_state(screen_surface):
+    # Convert the PyGame surface to a NumPy array
+    screen_array = pygame.surfarray.array3d(screen_surface)
+    # Resize and convert to grayscale
+    processed_frame = cv2.cvtColor(cv2.resize(screen_array, (80, 80)), cv2.COLOR_RGB2GRAY)
+    processed_frame = processed_frame / 255.0  # Normalize
+
+    return processed_frame
     
 
 #pygame.mixer.pre_init(frequency = 44100, size = 16, channels = 2, buffer = 1024)
@@ -133,6 +149,14 @@ reward = 0
 agent = False
 scale = 2
 punished = False
+frame_stack = deque(maxlen=4)
+
+# Define the dimensions
+input_dim = 80 * 80 * 4  # the size of state space
+output_dim = 2   # number of actions (flap and no flap)
+
+# Create an instance of the DQN model
+dqn_model = DQN(input_dim, output_dim)
 
 # Need global Q table that persists across runs, state maps to two actions (jump or wait)
 Q = defaultdict(lambda: np.zeros(2))
@@ -186,7 +210,7 @@ while True:
         if event.type == pygame.KEYDOWN:
             if event.key == pygame.K_SPACE and game_active:
                 bird_movement = 0
-                bird_movement -= 12
+                bird_movement -= 7
                 flap_sound.play()
                 last_action = 1
                 pygame.time.set_timer(AGENTEVENT,0)
@@ -234,7 +258,7 @@ while True:
             last_action = agent_action(state, epsilon)
             if(last_action):
                 # If chosen move is to flap, then flap
-                bird_movement = -12
+                bird_movement = -7
                 flap_sound.play()
             # Decrement random exploration
             epsilon = epsilon * 0.999
@@ -248,7 +272,36 @@ while True:
             score = 0
             last_action = 0
             punished = False
-            
+
+    # Get the current screen state and preprocess it
+    current_screen = pygame.display.get_surface()
+    processed_frame = preprocess_game_state(current_screen)
+
+    # Maintain the frame stack
+    frame_stack.append(processed_frame)
+    while len(frame_stack) < 4:
+        frame_stack.append(processed_frame)
+
+    # Convert the state to a PyTorch tensor and add a batch dimension
+    state_tensor = torch.tensor(np.stack(frame_stack, axis=-1), dtype=torch.float32)
+    state_tensor = state_tensor.flatten().unsqueeze(0)  # Flatten and add batch dimension
+
+    # Disable gradient computation for inference
+    with torch.no_grad():
+        q_values = dqn_model(state_tensor)
+        action = torch.argmax(q_values, dim=1).item()
+
+    # Prepare the DQN input
+    state = np.stack(frame_stack, axis=-1)
+
+    # Use DQN to decide action (you'll need to modify this part based on your DQN)
+    action = np.argmax(q_values[0])
+
+    # Modify bird_movement based on action
+    if action == 1:  # Assuming 1 represents 'flap'
+        bird_movement = -7  # Flap the bird
+
+
     # State should be unchanged, but confirm in case weird edge case
     pipe_distance = 700
     height_diff = 0
