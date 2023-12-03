@@ -139,7 +139,7 @@ if args.in_file is not None:
     Q = dill.load(infile)
 else:
     # Need global Q table that persists across runs, state maps to two actions (jump or wait)
-    Q = defaultdict(lambda: np.zeros(2))
+    Q = defaultdict(lambda: [-1,-1])
 
 
 
@@ -158,13 +158,16 @@ high_score = 0
 can_score = True
 bg_surface = pygame.image.load('assets/background-day.png').convert()
 bg_surface = pygame.transform.scale2x(bg_surface)
-epsilon = .1
+epsilon = 1
 alpha = 0.5
+n_episodes = 10000
+epsilon_inc = epsilon / n_episodes
+alpha_inc =  alpha / (2*n_episodes)
 gamma = 0.95
 last_action = 0
 reward = 0
 agent = False
-scale = 10
+scale = 20
 punished = True
 results = []
 runCount = 1
@@ -280,10 +283,9 @@ while True:
             last_action = agent_action(state, epsilon)
             if(last_action):
                 # If chosen move is to flap, then flap
-                bird_movement = -8
+                bird_movement = -7
                 flap_sound.play()
-            # Decrement random exploration
-            epsilon = epsilon * 0.999
+            
         
         # Game not active yet, need to activate it to get the agent to start interacting with the game
         if event.type == AGENTEVENT and not game_active:
@@ -354,6 +356,7 @@ while True:
         # Update Q table
         prev_Q = Q[state][last_action]
         Q[state][last_action] =  prev_Q + alpha*(reward + gamma*np.max(Q[next_state])- prev_Q)
+        
 
 
     # Game has ended, we died, punish agent
@@ -385,6 +388,10 @@ while True:
              # Update Q table
             prev_Q = Q[state][last_action]
             Q[state][last_action] =  prev_Q + alpha*(reward + gamma*np.max(Q[next_state])- prev_Q)
+
+            alpha -= alpha_inc
+            # Decrement random exploration
+            epsilon -= epsilon_inc
 
     # Do nothing by default
     last_action = 0
