@@ -158,9 +158,9 @@ high_score = 0
 can_score = True
 bg_surface = pygame.image.load('assets/background-day.png').convert()
 bg_surface = pygame.transform.scale2x(bg_surface)
-epsilon = .25
+epsilon = .1
 alpha = 0.5
-gamma = 1.0
+gamma = 0.95
 last_action = 0
 reward = 0
 agent = False
@@ -238,6 +238,7 @@ while True:
                 bird_rect.center = (100,512)
                 bird_movement = 0
                 score = 0
+                reward = 0
                 punished = False
                 pipe_list.extend(create_pipe())
                 pygame.time.set_timer(SPAWNPIPE,900)
@@ -266,8 +267,11 @@ while True:
             pipe_distance = 576-bird_rect.centerx
             height_diff = bird_rect.centery
             if (pipe_list):
-                pipe_distance = pipe_list[0].centerx - bird_rect.centerx
+                pipe_distance = pipe_list[0].right - bird_rect.centerx
                 height_diff = pipe_list[0].top - bird_rect.centery
+                if(pipe_distance<0):
+                    pipe_distance = pipe_list[2].right - bird_rect.centerx
+                    height_diff = pipe_list[2].top - bird_rect.centery
 
             state = (height_diff//scale, bird_movement//1, pipe_distance//scale)
             # Prepare state tuple from heght relative to next pipe, vertical velocity, 
@@ -288,6 +292,7 @@ while True:
             pygame.time.set_timer(SPAWNPIPE,0)
             bird_rect.center = (100,512)
             bird_movement = 0
+            reward = 0
             score = 0
             punished = False
             pipe_list.extend(create_pipe())
@@ -299,10 +304,10 @@ while True:
     height_diff = bird_rect.centery
     if (pipe_list):
         
-        pipe_distance = pipe_list[0].centerx - bird_rect.centerx
+        pipe_distance = pipe_list[0].right - bird_rect.centerx
         height_diff = pipe_list[0].top - bird_rect.centery
         if(pipe_distance<0):
-            pipe_distance = pipe_list[2].centerx - bird_rect.centerx
+            pipe_distance = pipe_list[2].right - bird_rect.centerx
             height_diff = pipe_list[2].top - bird_rect.centery
     distance_line = pygame.draw.line(screen, pygame.Color(255,0,0), (bird_rect.centerx, bird_rect.centery), (bird_rect.centerx+pipe_distance,bird_rect.centery))
     height_line = pygame.draw.line(screen, pygame.Color(0,0,255), (bird_rect.centerx, bird_rect.centery), (bird_rect.centerx,bird_rect.centery+height_diff))
@@ -327,7 +332,8 @@ while True:
         
         # Score
         # If we get a score increase, want the immediate reward to reflect that
-        reward = pipe_score_check()
+        pipe_score_check()
+        reward = 0
         score_display('main_game')
         next_state = (height_diff//scale, bird_movement//1, pipe_distance//scale)
 
@@ -336,8 +342,12 @@ while True:
         height_diff = bird_rect.centery
             
         if (pipe_list):
-            pipe_distance = pipe_list[0].centerx - bird_rect.centerx
+            pipe_distance = pipe_list[0].right - bird_rect.centerx
             height_diff = pipe_list[0].top - bird_rect.centery
+            if(pipe_distance<0):
+                pipe_distance = pipe_list[2].right - bird_rect.centerx
+                height_diff = pipe_list[2].top - bird_rect.centery
+                #reward -= 1
 
         next_state = (height_diff//scale, bird_movement//1, pipe_distance//scale)
         
@@ -354,7 +364,7 @@ while True:
 
         
 
-        reward = -1
+        reward = -100
         if not punished:
             punished = True
 
