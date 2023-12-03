@@ -7,6 +7,9 @@ import numpy as np
 from collections import deque
 from model_dqn import DQN
 import torch
+import argparse
+import csv
+import dill
 
 
 def draw_floor():
@@ -125,6 +128,33 @@ def preprocess_game_state(screen_surface):
 
     return processed_frame
     
+qout = False
+csvout = False
+
+parser = argparse.ArgumentParser(description='Train agent for flappy bird with Q-Table')
+parser.add_argument('--q_table_path',required=True,
+                    help='PKL output file for trained Q-table')
+parser.add_argument('--out_file', required=True,
+                    help='CSV output file for training results')
+parser.add_argument('--in_file',
+                    help='pkl file for starting Q-table')
+args = parser.parse_args()
+
+if args.q_table_path is not None:
+    outQfile = open(args.q_table_path, "wb")
+    qout = True
+
+if args.out_file is not None:
+    outfile = open(args.out_file,"w")
+    csvwriter = csv.writer(outfile)
+    csvout = True
+
+if args.in_file is not None:
+    infile = open(args.in_file, 'rb')
+    Q = dill.load(infile)
+else:
+    # Need global Q table that persists across runs, state maps to two actions (jump or wait)
+    Q = defaultdict(lambda: np.zeros(2))
 
 #pygame.mixer.pre_init(frequency = 44100, size = 16, channels = 2, buffer = 1024)
 pygame.init()
@@ -141,14 +171,16 @@ high_score = 0
 can_score = True
 bg_surface = pygame.image.load('assets/background-day.png').convert()
 bg_surface = pygame.transform.scale2x(bg_surface)
-epsilon = 1
+epsilon = .1
 alpha = 0.5
 gamma = 1.0
 last_action = 0
 reward = 0
 agent = False
-scale = 2
-punished = False
+scale = 5
+punished = True
+results = []
+runCount = 1
 frame_stack = deque(maxlen=4)
 
 # Define the dimensions
@@ -184,7 +216,7 @@ pipe_surface = pygame.image.load('assets/pipe-green.png')
 pipe_surface = pygame.transform.scale2x(pipe_surface)
 pipe_list = []
 SPAWNPIPE = pygame.USEREVENT
-pygame.time.set_timer(SPAWNPIPE,1200)
+pygame.time.set_timer(SPAWNPIPE,900)
 pipe_height = [400,600,800]
 
 game_over_surface = pygame.transform.scale2x(pygame.image.load('assets/message.png').convert_alpha())
@@ -205,12 +237,16 @@ while True:
     
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
+            if qout:
+                dill.dump(Q, outQfile)
+            if csvout:
+                csvwriter.writerows(results)
             pygame.quit()
             sys.exit()
         if event.type == pygame.KEYDOWN:
             if event.key == pygame.K_SPACE and game_active:
                 bird_movement = 0
-                bird_movement -= 7
+                bird_movement -= 8
                 flap_sound.play()
                 last_action = 1
                 pygame.time.set_timer(AGENTEVENT,0)
@@ -219,10 +255,13 @@ while True:
             if event.key == pygame.K_SPACE and game_active == False:
                 game_active = True
                 pipe_list.clear()
+                pygame.time.set_timer(SPAWNPIPE,0)
                 bird_rect.center = (100,512)
                 bird_movement = 0
                 score = 0
                 punished = False
+                pipe_list.extend(create_pipe())
+                pygame.time.set_timer(SPAWNPIPE, 900)
             
             if event.key == pygame.K_TAB and agent == True:
                 pygame.time.set_timer(AGENTEVENT,0)
@@ -258,7 +297,7 @@ while True:
             last_action = agent_action(state, epsilon)
             if(last_action):
                 # If chosen move is to flap, then flap
-                bird_movement = -7
+                bird_movement = -8
                 flap_sound.play()
             # Decrement random exploration
             epsilon = epsilon * 0.999
@@ -267,11 +306,14 @@ while True:
         if event.type == AGENTEVENT and not game_active:
             game_active = True
             pipe_list.clear()
+            pygame.time.set_timer(SPAWNPIPE,0)
             bird_rect.center = (100,512)
             bird_movement = 0
             score = 0
             last_action = 0
             punished = False
+            pipe_list.extend(create_pipe())
+            pygame.time.set_timer(SPAWNPIPE, 900)
 
     # Get the current screen state and preprocess it
     current_screen = pygame.display.get_surface()
@@ -299,7 +341,7 @@ while True:
 
     # Modify bird_movement based on action
     if action == 1:  # Assuming 1 represents 'flap'
-        bird_movement = -7  # Flap the bird
+        bird_movement = -8  # Flap the bird
 
 
     # State should be unchanged, but confirm in case weird edge case
@@ -345,6 +387,10 @@ while True:
         reward = -1
         if not punished:
             punished = True
+
+            # Run ended
+            results.append([runCount, score, agent])
+            runCount += 1
     
             # Check new state context
             if (pipe_list):
