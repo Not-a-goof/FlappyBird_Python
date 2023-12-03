@@ -158,13 +158,13 @@ high_score = 0
 can_score = True
 bg_surface = pygame.image.load('assets/background-day.png').convert()
 bg_surface = pygame.transform.scale2x(bg_surface)
-epsilon = .1
+epsilon = .25
 alpha = 0.5
 gamma = 1.0
 last_action = 0
 reward = 0
 agent = False
-scale = 5
+scale = 10
 punished = True
 results = []
 runCount = 1
@@ -263,13 +263,13 @@ while True:
         
         # Query Agent for action, if so have the same effect as a user-activated jump
         if event.type == AGENTEVENT and game_active:
-            pipe_distance = 700
-            height_diff = 0
+            pipe_distance = 576-bird_rect.centerx
+            height_diff = bird_rect.centery
             if (pipe_list):
                 pipe_distance = pipe_list[0].centerx - bird_rect.centerx
                 height_diff = pipe_list[0].top - bird_rect.centery
 
-            state = (height_diff//scale, bird_movement, pipe_distance//scale)
+            state = (height_diff//scale, bird_movement//1, pipe_distance//scale)
             # Prepare state tuple from heght relative to next pipe, vertical velocity, 
             #   and x distance to next pipe. To limit state space growth, 
             #   the distances are broken up into 10 pixel increments
@@ -293,15 +293,23 @@ while True:
             pipe_list.extend(create_pipe())
             pygame.time.set_timer(SPAWNPIPE,900)
             
+    screen.blit(bg_surface,(0,0))
     # State should be unchanged, but confirm in case weird edge case
-    pipe_distance = 700
-    height_diff = 0
+    pipe_distance = 576-bird_rect.centerx
+    height_diff = bird_rect.centery
     if (pipe_list):
+        
         pipe_distance = pipe_list[0].centerx - bird_rect.centerx
         height_diff = pipe_list[0].top - bird_rect.centery
+        if(pipe_distance<0):
+            pipe_distance = pipe_list[2].centerx - bird_rect.centerx
+            height_diff = pipe_list[2].top - bird_rect.centery
+    distance_line = pygame.draw.line(screen, pygame.Color(255,0,0), (bird_rect.centerx, bird_rect.centery), (bird_rect.centerx+pipe_distance,bird_rect.centery))
+    height_line = pygame.draw.line(screen, pygame.Color(0,0,255), (bird_rect.centerx, bird_rect.centery), (bird_rect.centerx,bird_rect.centery+height_diff))
+        
 
-    state = (height_diff//scale, bird_movement, pipe_distance//scale)
-    screen.blit(bg_surface,(0,0))
+    state = (height_diff//scale, bird_movement//1, pipe_distance//scale)
+    
 
     # This is where things actually happen in the game, bird moves up/down,
     #   pipes move 5 pixels closer to the bird, score is updated
@@ -321,8 +329,18 @@ while True:
         # If we get a score increase, want the immediate reward to reflect that
         reward = pipe_score_check()
         score_display('main_game')
-        next_state = (height_diff//scale, bird_movement, pipe_distance//scale)
+        next_state = (height_diff//scale, bird_movement//1, pipe_distance//scale)
 
+        # Check new state context
+        pipe_distance = 576-bird_rect.centerx
+        height_diff = bird_rect.centery
+            
+        if (pipe_list):
+            pipe_distance = pipe_list[0].centerx - bird_rect.centerx
+            height_diff = pipe_list[0].top - bird_rect.centery
+
+        next_state = (height_diff//scale, bird_movement//1, pipe_distance//scale)
+        
         # Update Q table
         prev_Q = Q[state][last_action]
         Q[state][last_action] =  prev_Q + alpha*(reward + gamma*np.max(Q[next_state])- prev_Q)
@@ -345,11 +363,14 @@ while True:
             runCount += 1
 
             # Check new state context
+            pipe_distance = 576-bird_rect.centerx
+            height_diff = bird_rect.centery
+            
             if (pipe_list):
                 pipe_distance = pipe_list[0].centerx - bird_rect.centerx
                 height_diff = pipe_list[0].top - bird_rect.centery
 
-            next_state = (height_diff//scale, bird_movement, pipe_distance//scale)
+            next_state = (height_diff//scale, bird_movement//1, pipe_distance//scale)
 
              # Update Q table
             prev_Q = Q[state][last_action]
