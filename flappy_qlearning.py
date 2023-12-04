@@ -158,11 +158,11 @@ high_score = 0
 can_score = True
 bg_surface = pygame.image.load('assets/background-day.png').convert()
 bg_surface = pygame.transform.scale2x(bg_surface)
-epsilon = 1
+epsilon = .4
 alpha = 0.5
 n_episodes = 10000
-epsilon_inc = epsilon / n_episodes
-alpha_inc =  alpha / (2*n_episodes)
+epsilon_inc = 1 / n_episodes
+alpha_inc =  (alpha-0.1) / (2*n_episodes)
 gamma = 0.95
 last_action = 0
 reward = 0
@@ -326,7 +326,7 @@ while True:
         rotated_bird = rotate_bird(bird_surface)
         bird_rect.centery += bird_movement
         screen.blit(rotated_bird,bird_rect)
-        game_active = check_collision(pipe_list)
+        game_active = check_collision(pipe_list[:2])
 
         # Pipes
         pipe_list = move_pipes(pipe_list)
@@ -390,8 +390,10 @@ while True:
             Q[state][last_action] =  prev_Q + alpha*(reward + gamma*np.max(Q[next_state])- prev_Q)
 
             alpha -= alpha_inc
+            alpha = min(0.1, alpha)
             # Decrement random exploration
             epsilon -= epsilon_inc
+            
 
     # Do nothing by default
     last_action = 0
