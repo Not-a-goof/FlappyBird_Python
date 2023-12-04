@@ -113,11 +113,11 @@ def agent_action(state,epsilon):
     
     # Right now, epsilon greedy choice
 
-    if random.uniform(0,1) < (1-epsilon):
-        action = np.argmax(Q[state]) 
+    if random.uniform(0, 1) < (1-epsilon):
+        action_now = np.argmax(Q[state])
     else:
-        action = random.choice(range(2))
-    return action
+        action_now = random.choice(range(2))
+    return action_now
 
 def preprocess_game_state(screen_surface):
     # Convert the PyGame surface to a NumPy array
@@ -171,7 +171,7 @@ high_score = 0
 can_score = True
 bg_surface = pygame.image.load('assets/background-day.png').convert()
 bg_surface = pygame.transform.scale2x(bg_surface)
-epsilon = .1
+epsilon = 0.3
 alpha = 0.5
 gamma = 1.0
 last_action = 0
