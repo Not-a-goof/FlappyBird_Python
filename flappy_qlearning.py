@@ -115,11 +115,15 @@ def agent_action(state,epsilon):
     
     # Right now, epsilon greedy choice
 
-    if random.uniform(0, 1) < (1-epsilon):
-        action_now = np.argmax(Q[state])
+    if random.uniform(0, 1) < (1 - epsilon):
+        # random tiebreaker
+        if Q[state][0] == Q[state][1]:
+            action = random.choice(range(2))
+        else:
+            action = np.argmax(Q[state])
     else:
-        action_now = random.choice(range(2))
-    return action_now
+        action = random.choice(range(2))
+    return action
 
 def preprocess_game_state(screen_surface):
     # Convert the PyGame surface to a NumPy array
@@ -172,7 +176,7 @@ if args.in_file is not None:
     Q = dill.load(infile)
 else:
     # Need global Q table that persists across runs, state maps to two actions (jump or wait)
-    Q = defaultdict(lambda: [-1, -1])
+    Q = defaultdict(lambda: [0,0])
 
 #pygame.mixer.pre_init(frequency = 44100, size = 16, channels = 2, buffer = 1024)
 pygame.init()
@@ -189,16 +193,16 @@ high_score = 0
 can_score = True
 bg_surface = pygame.image.load('assets/background-day.png').convert()
 bg_surface = pygame.transform.scale2x(bg_surface)
-epsilon = 0.4
-alpha = 0.3 # before 0.5
+epsilon = 0.3
+alpha = 0.5 # before 0.5
 n_episodes = 10000
-epsilon_inc = 1 / n_episodes
+epsilon_inc = .3 / n_episodes
 alpha_inc = (alpha-0.1) / (2*n_episodes)
 gamma = 0.95
 last_action = 0
 reward = 0
 agent = False
-scale = 20
+scale = 5
 punished = True
 results = []
 runCount = 1
@@ -239,7 +243,7 @@ pipe_surface = pygame.transform.scale2x(pipe_surface)
 pipe_list = []
 SPAWNPIPE = pygame.USEREVENT
 pygame.time.set_timer(SPAWNPIPE,900)
-pipe_height = [400,600,800]
+pipe_height = [400 + 5*x for x in range(81)]
 
 game_over_surface = pygame.transform.scale2x(pygame.image.load('assets/message.png').convert_alpha())
 game_over_rect = game_over_surface.get_rect(center = (288,512))
@@ -308,13 +312,13 @@ while True:
         
         # Query Agent for action, if so have the same effect as a user-activated jump
         if event.type == AGENTEVENT and game_active:
-            pipe_distance = 576 - bird_rect.centerx
+            pipe_distance = 576 - bird_rect.left
             height_diff = bird_rect.centery
             if (pipe_list):
-                pipe_distance = pipe_list[0].right - bird_rect.centerx
+                pipe_distance = pipe_list[0].right - bird_rect.left
                 height_diff = pipe_list[0].top - bird_rect.centery
                 if (pipe_distance < 0):
-                    pipe_distance = pipe_list[2].right - bird_rect.centerx
+                    pipe_distance = pipe_list[2].right - bird_rect.left
                     height_diff = pipe_list[2].top - bird_rect.centery
 
             state = (height_diff//scale, bird_movement//1, pipe_distance//scale)
@@ -327,7 +331,7 @@ while True:
                 bird_movement = -8
                 flap_sound.play()
             # Decrement random exploration
-            epsilon = epsilon * 0.9995
+            #epsilon = epsilon * 0.9995
         
         # Game not active yet, need to activate it to get the agent to start interacting with the game
         if event.type == AGENTEVENT and not game_active:
@@ -342,7 +346,6 @@ while True:
             punished = False
             pipe_list.extend(create_pipe())
             pygame.time.set_timer(SPAWNPIPE, 900)
-
 
     # Get the current screen state and preprocess it
     current_screen = pygame.display.get_surface()
@@ -376,16 +379,16 @@ while True:
 
 
     # State should be unchanged, but confirm in case weird edge case
-    pipe_distance = 576 - bird_rect.centerx
+    pipe_distance = 576 - bird_rect.left
     height_diff = bird_rect.centery
     if (pipe_list):
-        pipe_distance = pipe_list[0].right - bird_rect.centerx
+        pipe_distance = pipe_list[0].right - bird_rect.left
         height_diff = pipe_list[0].top - bird_rect.centery
         if (pipe_distance < 0):
-            pipe_distance = pipe_list[2].right - bird_rect.centerx
+            pipe_distance = pipe_list[2].right - bird_rect.left
             height_diff = pipe_list[2].top - bird_rect.centery
-        distance_line = pygame.draw.line(screen, pygame.Color(255, 0, 0), (bird_rect.centerx, bird_rect.centery),
-                                         (bird_rect.centerx + pipe_distance, bird_rect.centery))
+        distance_line = pygame.draw.line(screen, pygame.Color(255, 0, 0), (bird_rect.left, bird_rect.centery),
+                                         (bird_rect.left + pipe_distance, bird_rect.centery))
         height_line = pygame.draw.line(screen, pygame.Color(0, 0, 255), (bird_rect.centerx, bird_rect.centery),
                                        (bird_rect.centerx, bird_rect.centery + height_diff))
 
@@ -414,32 +417,14 @@ while True:
         pipe_score_check()
         reward = 0
         score_display('main_game')
-        next_state = (height_diff//scale, bird_movement//1, pipe_distance//scale)
-
-        # Check new state context
-        pipe_distance = 576 - bird_rect.centerx
-        height_diff = bird_rect.centery
-
-        if (pipe_list):
-            pipe_distance = pipe_list[0].right - bird_rect.centerx
-            height_diff = pipe_list[0].top - bird_rect.centery
-            if (pipe_distance < 0):
-                pipe_distance = pipe_list[2].right - bird_rect.centerx
-                height_diff = pipe_list[2].top - bird_rect.centery
-                # reward -= 1
-
-        next_state = (height_diff // scale, bird_movement // 1, pipe_distance // scale)
-
-        # Update Q table
-        prev_Q = Q[state][last_action]
-        Q[state][last_action] =  prev_Q + alpha*(reward + gamma*np.max(Q[next_state])- prev_Q)
-
+        #next_state = (height_diff//scale, bird_movement//1, pipe_distance//scale)
 
     # Game has ended, we died, punish agent
     if not game_active:
         screen.blit(game_over_surface,game_over_rect)
         high_score = update_score(score,high_score)
         score_display('game_over')
+
         reward = -100
         if not punished:
             punished = True
@@ -447,24 +432,28 @@ while True:
             # Run ended
             results.append([runCount,score, agent])
             runCount += 1
-    
-            # Check new state context
-            pipe_distance = 576 - bird_rect.centerx
-            height_diff = bird_rect.centery
-            if (pipe_list):
-                pipe_distance = pipe_list[0].centerx - bird_rect.centerx
-                height_diff = pipe_list[0].top - bird_rect.centery
-
-            next_state = (height_diff//scale, bird_movement//1, pipe_distance//scale)
-
-             # Update Q table
-            prev_Q = Q[state][last_action]
-            Q[state][last_action] =  prev_Q + alpha*(reward + gamma*np.max(Q[next_state])- prev_Q)
-
             alpha -= alpha_inc
             alpha = min(0.1, alpha)
             # Decrement random exploration
             epsilon -= epsilon_inc
+    
+        # Check new state context
+    pipe_distance = 576 - bird_rect.left
+    height_diff = bird_rect.centery
+    if (pipe_list):
+        pipe_distance = pipe_list[0].right - bird_rect.left
+        height_diff = pipe_list[0].top - bird_rect.centery
+        if (pipe_distance < 0):
+            pipe_distance = pipe_list[2].right - bird_rect.left
+            height_diff = pipe_list[2].top - bird_rect.centery
+
+    next_state = (height_diff//scale, bird_movement//1, pipe_distance//scale)
+
+     # Update Q table
+    prev_Q = Q[state][last_action]
+    Q[state][last_action] =  prev_Q + alpha*(reward + gamma*np.max(Q[next_state])- prev_Q)
+
+
 
     # Do nothing by default
     last_action = 0
