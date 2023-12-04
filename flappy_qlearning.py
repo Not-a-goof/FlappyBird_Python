@@ -271,8 +271,8 @@ while True:
                 pygame.time.set_timer(AGENTEVENT,120)
                 agent = True
 
-        if event.type == SPAWNPIPE:
-            pipe_list.extend(create_pipe())
+        #if event.type == SPAWNPIPE:
+            #pipe_list.extend(create_pipe())
 
         if event.type == BIRDFLAP:
             if bird_index < 2:
@@ -367,6 +367,9 @@ while True:
         # Pipes
         pipe_list = move_pipes(pipe_list)
         draw_pipes(pipe_list)
+        
+        if pipe_list and 0 <= pipe_list[0].left < 5:
+            pipe_list.extend(create_pipe())
         
         # Score
         # If we get a score increase, want the immediate reward to reflect that
