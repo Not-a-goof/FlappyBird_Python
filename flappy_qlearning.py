@@ -194,7 +194,7 @@ can_score = True
 bg_surface = pygame.image.load('assets/background-day.png').convert()
 bg_surface = pygame.transform.scale2x(bg_surface)
 epsilon = 0.3
-alpha = 0.5 # before 0.5
+alpha = 0.1 # before 0.5
 n_episodes = 10000
 epsilon_inc = .3 / n_episodes
 alpha_inc = (alpha-0.1) / (2*n_episodes)
@@ -370,14 +370,14 @@ while True:
     # Prepare the DQN input
     state = np.stack(frame_stack, axis=-1)
 
-    # Use DQN to decide action (you'll need to modify this part based on your DQN)
+    # Use DQN to decide action
     action = np.argmax(q_values[0])
 
     # Modify bird_movement based on action
     if action == 1:  # Assuming 1 represents 'flap'
         bird_movement = -8  # Flap the bird
 
-
+    screen.blit(bg_surface, (0, 0))
     # State should be unchanged, but confirm in case weird edge case
     pipe_distance = 576 - bird_rect.left
     height_diff = bird_rect.centery
@@ -393,7 +393,7 @@ while True:
                                        (bird_rect.centerx, bird_rect.centery + height_diff))
 
     state = (height_diff//scale, bird_movement//1, pipe_distance//scale)
-    screen.blit(bg_surface,(0,0))
+
 
     # This is where things actually happen in the game, bird moves up/down,
     #   pipes move 5 pixels closer to the bird, score is updated
