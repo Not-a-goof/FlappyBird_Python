@@ -108,7 +108,11 @@ def agent_action(state,epsilon):
     # Right now, epsilon greedy choice
 
     if random.uniform(0,1) < (1-epsilon):
-        action = np.argmax(Q[state]) 
+        #random tiebreaker
+        if Q[state][0] == Q[state][1]:
+            action = random.choice(range(2))
+        else: 
+            action = np.argmax(Q[state]) 
     else:
         action = random.choice(range(2))
     return action
@@ -139,7 +143,7 @@ if args.in_file is not None:
     Q = dill.load(infile)
 else:
     # Need global Q table that persists across runs, state maps to two actions (jump or wait)
-    Q = defaultdict(lambda: [-1,-1])
+    Q = defaultdict(lambda: [0,0])
 
 
 
@@ -167,7 +171,7 @@ gamma = 0.95
 last_action = 0
 reward = 0
 agent = False
-scale = 20
+scale = 5
 punished = True
 results = []
 runCount = 1
@@ -198,7 +202,7 @@ pipe_surface = pygame.transform.scale2x(pipe_surface)
 pipe_list = []
 SPAWNPIPE = pygame.USEREVENT
 pygame.time.set_timer(SPAWNPIPE,900)
-pipe_height = [400,600,800]
+pipe_height = [400 + 5*x for x in range(81)]
 
 game_over_surface = pygame.transform.scale2x(pygame.image.load('assets/message.png').convert_alpha())
 game_over_rect = game_over_surface.get_rect(center = (288,512))
@@ -316,6 +320,7 @@ while True:
         
 
     state = (height_diff//scale, bird_movement//1, pipe_distance//scale)
+    #print(state)
     
 
     # This is where things actually happen in the game, bird moves up/down,
@@ -340,7 +345,7 @@ while True:
         pipe_score_check()
         reward = 0
         score_display('main_game')
-        next_state = (height_diff//scale, bird_movement//1, pipe_distance//scale)
+        #next_state = (height_diff//scale, bird_movement//1, pipe_distance//scale)
 
         
         
@@ -370,22 +375,22 @@ while True:
             epsilon -= epsilon_inc
 
     # Check new state context
-        pipe_distance = 576-bird_rect.left
-        height_diff = bird_rect.centery
+    pipe_distance = 576-bird_rect.left
+    height_diff = bird_rect.centery
             
-        if (pipe_list):
-            pipe_distance = pipe_list[0].right - bird_rect.left
-            height_diff = pipe_list[0].top - bird_rect.centery
-            if(pipe_distance<0):
-                pipe_distance = pipe_list[2].right - bird_rect.left
-                height_diff = pipe_list[2].top - bird_rect.centery
+    if (pipe_list):
+        pipe_distance = pipe_list[0].right - bird_rect.left
+        height_diff = pipe_list[0].top - bird_rect.centery
+        if(pipe_distance<0):
+            pipe_distance = pipe_list[2].right - bird_rect.left
+            height_diff = pipe_list[2].top - bird_rect.centery
                 #reward -= 1
 
-        next_state = (height_diff//scale, bird_movement//1, pipe_distance//scale)
+    next_state = (height_diff//scale, bird_movement//1, pipe_distance//scale)
         
         # Update Q table
-        prev_Q = Q[state][last_action]
-        Q[state][last_action] =  prev_Q + alpha*(reward + gamma*np.max(Q[next_state])- prev_Q)
+    prev_Q = Q[state][last_action]
+    Q[state][last_action] =  prev_Q + alpha*(reward + gamma*np.max(Q[next_state])- prev_Q)
             
 
     # Do nothing by default
