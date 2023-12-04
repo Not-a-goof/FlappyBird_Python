@@ -10,7 +10,9 @@ import torch
 import argparse
 import csv
 import dill
-
+import matplotlib.pyplot as plt
+import os
+#os.environ['KMP_DUPLICATE_LIB_OK']='TRUE'
 
 def draw_floor():
     screen.blit(floor_surface,(floor_x_pos,900))
@@ -121,12 +123,28 @@ def agent_action(state,epsilon):
 
 def preprocess_game_state(screen_surface):
     # Convert the PyGame surface to a NumPy array
-    screen_array = pygame.surfarray.array3d(screen_surface)
+    screen_array = pygame.surfarray.array3d(screen_surface).transpose([1, 0, 2])
     # Resize and convert to grayscale
     processed_frame = cv2.cvtColor(cv2.resize(screen_array, (80, 80)), cv2.COLOR_RGB2GRAY)
     processed_frame = processed_frame / 255.0  # Normalize
 
     return processed_frame
+"""
+def visualize_frame_stack(frame_stack):
+    # Create a figure for plotting
+    plt.figure(figsize=(10, 2))
+
+    for i, frame in enumerate(frame_stack):
+        # Create a subplot for each frame
+        ax = plt.subplot(1, len(frame_stack), i + 1)
+        ax.imshow(frame, cmap='gray')
+        ax.set_title(f"Frame {i}")
+        plt.axis('off')
+
+    # Display the frames
+    #plt.show()
+    plt.savefig("stackframe.png")
+    """
     
 qout = False
 csvout = False
@@ -154,7 +172,7 @@ if args.in_file is not None:
     Q = dill.load(infile)
 else:
     # Need global Q table that persists across runs, state maps to two actions (jump or wait)
-    Q = defaultdict(lambda: np.zeros(2))
+    Q = defaultdict(lambda: [-1, -1])
 
 #pygame.mixer.pre_init(frequency = 44100, size = 16, channels = 2, buffer = 1024)
 pygame.init()
@@ -171,13 +189,16 @@ high_score = 0
 can_score = True
 bg_surface = pygame.image.load('assets/background-day.png').convert()
 bg_surface = pygame.transform.scale2x(bg_surface)
-epsilon = 0.3
-alpha = 0.5
-gamma = 1.0
+epsilon = 0.4
+alpha = 0.3 # before 0.5
+n_episodes = 10000
+epsilon_inc = 1 / n_episodes
+alpha_inc = (alpha-0.1) / (2*n_episodes)
+gamma = 0.95
 last_action = 0
 reward = 0
 agent = False
-scale = 5
+scale = 20
 punished = True
 results = []
 runCount = 1
@@ -189,6 +210,7 @@ output_dim = 2   # number of actions (flap and no flap)
 
 # Create an instance of the DQN model
 dqn_model = DQN(input_dim, output_dim)
+
 
 # Need global Q table that persists across runs, state maps to two actions (jump or wait)
 Q = defaultdict(lambda: np.zeros(2))
@@ -233,6 +255,7 @@ pygame.time.set_timer(SCOREEVENT,100)
 AGENTEVENT = pygame.USEREVENT + 3
 #pygame.time.set_timer(AGENTEVENT,120)
 
+
 while True:
     
     for event in pygame.event.get():
@@ -259,6 +282,7 @@ while True:
                 bird_rect.center = (100,512)
                 bird_movement = 0
                 score = 0
+                reward = 0
                 punished = False
                 pipe_list.extend(create_pipe())
                 pygame.time.set_timer(SPAWNPIPE, 900)
@@ -284,13 +308,16 @@ while True:
         
         # Query Agent for action, if so have the same effect as a user-activated jump
         if event.type == AGENTEVENT and game_active:
-            pipe_distance = 700
-            height_diff = 0
+            pipe_distance = 576 - bird_rect.centerx
+            height_diff = bird_rect.centery
             if (pipe_list):
-                pipe_distance = pipe_list[0].centerx - bird_rect.centerx
+                pipe_distance = pipe_list[0].right - bird_rect.centerx
                 height_diff = pipe_list[0].top - bird_rect.centery
+                if (pipe_distance < 0):
+                    pipe_distance = pipe_list[2].right - bird_rect.centerx
+                    height_diff = pipe_list[2].top - bird_rect.centery
 
-            state = (height_diff//scale, bird_movement, pipe_distance//scale)
+            state = (height_diff//scale, bird_movement//1, pipe_distance//scale)
             # Prepare state tuple from heght relative to next pipe, vertical velocity, 
             #   and x distance to next pipe. To limit state space growth, 
             #   the distances are broken up into 10 pixel increments
@@ -300,7 +327,7 @@ while True:
                 bird_movement = -8
                 flap_sound.play()
             # Decrement random exploration
-            epsilon = epsilon * 0.999
+            epsilon = epsilon * 0.9995
         
         # Game not active yet, need to activate it to get the agent to start interacting with the game
         if event.type == AGENTEVENT and not game_active:
@@ -309,11 +336,13 @@ while True:
             pygame.time.set_timer(SPAWNPIPE,0)
             bird_rect.center = (100,512)
             bird_movement = 0
+            reward = 0
             score = 0
             last_action = 0
             punished = False
             pipe_list.extend(create_pipe())
             pygame.time.set_timer(SPAWNPIPE, 900)
+
 
     # Get the current screen state and preprocess it
     current_screen = pygame.display.get_surface()
@@ -323,6 +352,8 @@ while True:
     frame_stack.append(processed_frame)
     while len(frame_stack) < 4:
         frame_stack.append(processed_frame)
+
+    #visualize_frame_stack(frame_stack)
 
     # Convert the state to a PyTorch tensor and add a batch dimension
     state_tensor = torch.tensor(np.stack(frame_stack, axis=-1), dtype=torch.float32)
@@ -345,13 +376,20 @@ while True:
 
 
     # State should be unchanged, but confirm in case weird edge case
-    pipe_distance = 700
-    height_diff = 0
+    pipe_distance = 576 - bird_rect.centerx
+    height_diff = bird_rect.centery
     if (pipe_list):
-        pipe_distance = pipe_list[0].centerx - bird_rect.centerx
+        pipe_distance = pipe_list[0].right - bird_rect.centerx
         height_diff = pipe_list[0].top - bird_rect.centery
+        if (pipe_distance < 0):
+            pipe_distance = pipe_list[2].right - bird_rect.centerx
+            height_diff = pipe_list[2].top - bird_rect.centery
+        distance_line = pygame.draw.line(screen, pygame.Color(255, 0, 0), (bird_rect.centerx, bird_rect.centery),
+                                         (bird_rect.centerx + pipe_distance, bird_rect.centery))
+        height_line = pygame.draw.line(screen, pygame.Color(0, 0, 255), (bird_rect.centerx, bird_rect.centery),
+                                       (bird_rect.centerx, bird_rect.centery + height_diff))
 
-    state = (height_diff//scale, bird_movement, pipe_distance//scale)
+    state = (height_diff//scale, bird_movement//1, pipe_distance//scale)
     screen.blit(bg_surface,(0,0))
 
     # This is where things actually happen in the game, bird moves up/down,
@@ -362,7 +400,7 @@ while True:
         rotated_bird = rotate_bird(bird_surface)
         bird_rect.centery += bird_movement
         screen.blit(rotated_bird,bird_rect)
-        game_active = check_collision(pipe_list)
+        game_active = check_collision(pipe_list[:2])
 
         # Pipes
         pipe_list = move_pipes(pipe_list)
@@ -370,9 +408,24 @@ while True:
         
         # Score
         # If we get a score increase, want the immediate reward to reflect that
-        reward = pipe_score_check()
+        pipe_score_check()
+        reward = 0
         score_display('main_game')
-        next_state = (height_diff//scale, bird_movement, pipe_distance//scale)
+        next_state = (height_diff//scale, bird_movement//1, pipe_distance//scale)
+
+        # Check new state context
+        pipe_distance = 576 - bird_rect.centerx
+        height_diff = bird_rect.centery
+
+        if (pipe_list):
+            pipe_distance = pipe_list[0].right - bird_rect.centerx
+            height_diff = pipe_list[0].top - bird_rect.centery
+            if (pipe_distance < 0):
+                pipe_distance = pipe_list[2].right - bird_rect.centerx
+                height_diff = pipe_list[2].top - bird_rect.centery
+                # reward -= 1
+
+        next_state = (height_diff // scale, bird_movement // 1, pipe_distance // scale)
 
         # Update Q table
         prev_Q = Q[state][last_action]
@@ -384,24 +437,31 @@ while True:
         screen.blit(game_over_surface,game_over_rect)
         high_score = update_score(score,high_score)
         score_display('game_over')
-        reward = -1
+        reward = -100
         if not punished:
             punished = True
 
             # Run ended
-            results.append([runCount, score, agent])
+            results.append([runCount,score, agent])
             runCount += 1
     
             # Check new state context
+            pipe_distance = 576 - bird_rect.centerx
+            height_diff = bird_rect.centery
             if (pipe_list):
                 pipe_distance = pipe_list[0].centerx - bird_rect.centerx
                 height_diff = pipe_list[0].top - bird_rect.centery
 
-            next_state = (height_diff//scale, bird_movement, pipe_distance//scale)
+            next_state = (height_diff//scale, bird_movement//1, pipe_distance//scale)
 
              # Update Q table
             prev_Q = Q[state][last_action]
             Q[state][last_action] =  prev_Q + alpha*(reward + gamma*np.max(Q[next_state])- prev_Q)
+
+            alpha -= alpha_inc
+            alpha = min(0.1, alpha)
+            # Decrement random exploration
+            epsilon -= epsilon_inc
 
     # Do nothing by default
     last_action = 0
@@ -418,3 +478,4 @@ while True:
 
     pygame.display.update()
     clock.tick(120)
+
