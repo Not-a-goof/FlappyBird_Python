@@ -109,11 +109,15 @@ def agent_action(state,epsilon):
 
     if random.uniform(0,1) < (1-epsilon):
         #random tiebreaker
+        #print(state)
         if Q[state][0] == Q[state][1]:
+            #if Q[state][0] == 0: print("State Not seen")
             action = random.choice(range(2))
         else: 
+            #print("State seen before")
             action = np.argmax(Q[state]) 
     else:
+        #print("Random Action")
         action = random.choice(range(2))
     return action
 
@@ -162,10 +166,10 @@ high_score = 0
 can_score = True
 bg_surface = pygame.image.load('assets/background-day.png').convert()
 bg_surface = pygame.transform.scale2x(bg_surface)
-epsilon = .3
+epsilon = .1
 alpha = 0.5
 n_episodes = 10000
-epsilon_inc = .3 / n_episodes
+epsilon_inc = .1 / n_episodes
 alpha_inc =  (alpha-0.1) / (2*n_episodes)
 gamma = 0.95
 last_action = 0
@@ -175,6 +179,7 @@ scale = 5
 punished = True
 results = []
 runCount = 1
+
 
 
 
@@ -333,6 +338,28 @@ while True:
         screen.blit(rotated_bird,bird_rect)
         game_active = check_collision(pipe_list[:2])
 
+        if not game_active: reward = -100
+        else: reward = 0
+
+        # Check new state context
+        pipe_distance = 576-bird_rect.left
+        height_diff = bird_rect.centery
+            
+        if (pipe_list):
+            pipe_distance = pipe_list[0].right - bird_rect.left
+            height_diff = pipe_list[0].top - bird_rect.centery
+            if(pipe_distance<0):
+                pipe_distance = pipe_list[2].right - bird_rect.left
+                height_diff = pipe_list[2].top - bird_rect.centery
+                #reward -= 1
+
+        next_state = (height_diff//scale, bird_movement//1, pipe_distance//scale)
+        
+        # Update Q table
+        prev_Q = Q[state][last_action]
+        #next_action = agent_action(next_state, epsilon)
+        Q[state][last_action] =  prev_Q + alpha*(reward + gamma*np.max(Q[next_state])- prev_Q)
+
         # Pipes
         pipe_list = move_pipes(pipe_list)
         draw_pipes(pipe_list)
@@ -343,7 +370,7 @@ while True:
         # Score
         # If we get a score increase, want the immediate reward to reflect that
         pipe_score_check()
-        reward = 0
+        
         score_display('main_game')
         #next_state = (height_diff//scale, bird_movement//1, pipe_distance//scale)
 
@@ -358,8 +385,6 @@ while True:
         score_display('game_over')
 
         
-
-        reward = -100
         if not punished:
             punished = True
 
@@ -374,23 +399,8 @@ while True:
             # Decrement random exploration
             epsilon -= epsilon_inc
 
-    # Check new state context
-    pipe_distance = 576-bird_rect.left
-    height_diff = bird_rect.centery
-            
-    if (pipe_list):
-        pipe_distance = pipe_list[0].right - bird_rect.left
-        height_diff = pipe_list[0].top - bird_rect.centery
-        if(pipe_distance<0):
-            pipe_distance = pipe_list[2].right - bird_rect.left
-            height_diff = pipe_list[2].top - bird_rect.centery
-                #reward -= 1
-
-    next_state = (height_diff//scale, bird_movement//1, pipe_distance//scale)
-        
-        # Update Q table
-    prev_Q = Q[state][last_action]
-    Q[state][last_action] =  prev_Q + alpha*(reward + gamma*np.max(Q[next_state])- prev_Q)
+    
+    
             
 
     # Do nothing by default
