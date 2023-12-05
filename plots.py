@@ -2,12 +2,12 @@ import pandas as pd
 import matplotlib.pyplot as plt
 
 # Load the CSV file
-data = pd.read_csv('results_final.csv')  # Replace with your file path
+data = pd.read_csv('results_final.csv')
 
-# Calculate averages for every 50 entries in the second column
+# Calculate averages for every 50 entries
 averages = []
 for i in range(0, len(data), 50):
-    avg = data.iloc[i:i+30, 1].mean()  # Assuming second column is at index 1
+    avg = data.iloc[i:i+50, 1].mean()
     averages.append(avg)
 
 # Plotting the averages
